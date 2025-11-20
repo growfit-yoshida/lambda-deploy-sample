@@ -1,0 +1,80 @@
+name: Deploy Lambda (Python & Node)
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: ap-northeast-1
+  LAMBDA_PY_FUNCTION_NAME: sample-python-lambda
+  LAMBDA_NODE_FUNCTION_NAME: sample-node-lambda
+  LAMBDA_EXEC_ROLE_ARN: arn:aws:iam::809277720638:role/lambda-exec-role-lambda-sample
+
+jobs:
+  deploy-python:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install Python dependencies
+        run: |
+          cd lambda-python
+          pip install -r requirements.txt -t .
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Deploy Python Lambda
+        uses: aws-actions/aws-lambda-deploy@v1
+        with:
+          function-name: ${{ env.LAMBDA_PY_FUNCTION_NAME }}
+          code-artifacts-dir: ./lambda-python
+          handler: app.lambda_handler
+          runtime: python3.13
+          role: ${{ env.LAMBDA_EXEC_ROLE_ARN }}
+
+  deploy-node:
+    runs-on: ubuntu-latest
+    needs: deploy-python
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install Node dependencies
+        run: |
+          cd lambda-node
+          npm ci --omit=dev
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Deploy Node Lambda
+        uses: aws-actions/aws-lambda-deploy@v1
+        with:
+          function-name: ${{ env.LAMBDA_NODE_FUNCTION_NAME }}
+          code-artifacts-dir: ./lambda-node
+          handler: index.handler
+          runtime: nodejs22.x
+          role: ${{ env.LAMBDA_EXEC_ROLE_ARN }}
